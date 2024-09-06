@@ -8,7 +8,12 @@ import { v4 as uuid } from "uuid";
 import { connectDB } from "./utils/Db.js";
 
 // routes imports
-import { NEW_MESSAGES, NEW_MESSAGES_ALERT } from "./constants/event.js";
+import {
+  NEW_MESSAGES,
+  NEW_MESSAGES_ALERT,
+  START_TYPING,
+  STOP_TYPING,
+} from "./constants/event.js";
 import { getSockets } from "./lib/helper.js";
 import { socketAuthenticator } from "./middleware/isAuth.js";
 import { Message } from "./models/Message.model.js";
@@ -100,8 +105,28 @@ io.on("connection", (socket) => {
       sender: tempUser._id,
       chat: chatId,
     };
-    await Message.create(messageForDb);
-    console.log("emmiting", MessageForRealTime);
+
+    const membersSocket = getSockets(members);
+    io.to(membersSocket).emit(NEW_MESSAGE, {
+      chatId,
+      message: messageForRealTime,
+    });
+    io.to(membersSocket).emit(NEW_MESSAGE_ALERT, { chatId });
+
+    try {
+      await Message.create(messageForDb);
+    } catch (error) {
+      throw new Error(error);
+    }
+    socket.on(START_TYPING, ({ members, chatId }) => {
+      const membersSockets = getSockets(members);
+      socket.to(membersSockets).emit(START_TYPING, { chatId });
+    });
+
+    socket.on(STOP_TYPING, ({ members, chatId }) => {
+      const membersSockets = getSockets(members);
+      socket.to(membersSockets).emit(STOP_TYPING, { chatId });
+    });
 
     const userSocket = getSockets(member);
     io.to(userSocket).emit(NEW_MESSAGES, {
@@ -111,6 +136,16 @@ io.on("connection", (socket) => {
     io.to(userSocket).emit(NEW_MESSAGES_ALERT, {
       chatId,
     });
+  });
+
+  socket.on(START_TYPING, ({ members, chatId }) => {
+    const membersSockets = getSockets(members);
+    socket.to(membersSockets).emit(START_TYPING, { chatId });
+  });
+
+  socket.on(STOP_TYPING, ({ members, chatId }) => {
+    const membersSockets = getSockets(members);
+    socket.to(membersSockets).emit(STOP_TYPING, { chatId });
   });
 
   socket.on("disconnect", () => {

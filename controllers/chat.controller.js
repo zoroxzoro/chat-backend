@@ -11,6 +11,7 @@ import {
   ALERT,
   NEW_ATTACHMENTS,
   NEW_MESSAGES,
+  NEW_MESSAGES_ALERT,
   REFETCH_CHATS,
 } from "../constants/event.js";
 import { getOtherMember } from "../lib/helper.js";
@@ -226,52 +227,54 @@ export const leaveGroup = TryCatch(async (req, res, next) => {
 export const sendAttachments = TryCatch(async (req, res, next) => {
   const { chatId } = req.body;
 
-  // Corrected: Await the Promise.all to ensure chat and user are resolved
-  const [chat, user] = await Promise.all([
-    Chat.findById(chatId),
-    User.findById(req.user, "name"), // Corrected: Use req.user._id
-  ]);
-  console.log("chat,user", req.user);
-
-  if (!chat) return next(new ErrorHandler("Chat not found", 404));
   const files = req.files || [];
 
   if (files.length < 1)
-    return next(new ErrorHandler("Please add at least 1 file", 400));
-  if (files.length > 5)
-    return next(new ErrorHandler("Cannot add more than 5 files", 400));
+    return next(new ErrorHandler("Please Upload Attachments", 400));
 
-  // Corrected: Handle file uploads and populate the attachments array
+  if (files.length > 5)
+    return next(new ErrorHandler("Files Can't be more than 5", 400));
+
+  const [chat, me] = await Promise.all([
+    Chat.findById(chatId),
+    User.findById(req.user, "name"),
+  ]);
+
+  if (!chat) return next(new ErrorHandler("Chat not found", 404));
+
+  if (files.length < 1)
+    return next(new ErrorHandler("Please provide attachments", 400));
+
+  //   Upload files here
   const attachments = await uploadFilesToCloudinary(files);
 
-  const MessageForRealtime = {
+  const messageForDB = {
     content: "",
     attachments,
+    sender: me._id,
+    chat: chatId,
+  };
+
+  const messageForRealTime = {
+    ...messageForDB,
     sender: {
-      _id: user._id,
-      name: user.name,
+      _id: me._id,
+      name: me.name,
     },
-    chat: chatId,
   };
-  const messageForDb = {
-    content: "",
-    attachments,
-    sender: user._id,
-    chat: chatId,
-  };
-  const message = await Message.create(messageForDb);
+
+  const message = await Message.create(messageForDB);
 
   emitEvent(req, NEW_MESSAGES, chat.members, {
-    message: MessageForRealtime,
+    message: messageForRealTime,
     chatId,
   });
-  emitEvent(req, NEW_MESSAGES, chat.members, {
-    chatId,
-  });
+
+  emitEvent(req, NEW_MESSAGES_ALERT, chat.members, { chatId });
 
   return res.status(200).json({
     success: true,
-    message: message,
+    message,
   });
 });
 
