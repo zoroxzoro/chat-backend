@@ -23,6 +23,7 @@ import ChatRoutes from "./routes/chat.routes.js";
 import dotenv from "dotenv";
 import { log } from "console";
 import { corsOptions } from "./constants/config.js";
+
 dotenv.config();
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -32,6 +33,7 @@ cloudinary.config({
 
 // Initialize express app
 const app = express();
+app.use(cors(corsOptions));
 const server = createServer(app);
 const io = new Server(server, {
   cors: corsOptions,
@@ -41,7 +43,7 @@ app.set("io", io);
 
 // Middleware
 app.use(express.json());
-app.use(cors(corsOptions));
+
 app.use(cookieParser());
 
 // Socket middleware
@@ -92,12 +94,12 @@ io.on("connection", (socket) => {
       chat: chatId,
     };
 
-    const membersSocket = getSockets(members);
-    io.to(membersSocket).emit(NEW_MESSAGE, {
+    const membersSocket = getSockets(member);
+    io.to(membersSocket).emit(NEW_MESSAGES, {
       chatId,
-      message: messageForRealTime,
+      message: MessageForRealTime,
     });
-    io.to(membersSocket).emit(NEW_MESSAGE_ALERT, { chatId });
+    io.to(membersSocket).emit(NEW_MESSAGES_ALERT, { chatId });
 
     try {
       await Message.create(messageForDb);
@@ -146,6 +148,7 @@ connectDB(process.env.URL);
 // Start the server
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  console.log(process.env.CLIENT_URL);
 });
 
 export { io, userSocketIDs };
